@@ -11,42 +11,7 @@ import org.json.simple.parser.ParseException;
 // java -cp "lib/json-simple-1.1.1.jar;." GETClient 
 
 
-/*
- *  Specifies 
- * 
- * 
- */
 public class GETClient {
-
-    public static void main(String[] args) {
-
-        Scanner scanner = new Scanner(System.in);
-
-        System.out.print("[URL]: ");
-        String url = scanner.nextLine(); 
-
-        if(url == ""){ // default address
-            url = "http://127.0.0.1:9000";
-        }
-
-        System.out.print("[ID ]: ");
-        String id = scanner.nextLine(); 
-                
-        while(true){
-
-            System.out.println("\n[Press Enter to Fetch Weather Data, Type 'exit' To Close]");
-            String input = scanner.nextLine(); // waits until Enter is pressed
-
-            if("exit".equalsIgnoreCase(input)){
-                break;
-            }
-
-            FetchData(url, id);
-        }
-
-        scanner.close();
-
-    }
 
     public static void FetchData(String serverUrl, String contentServerId){
 
@@ -151,7 +116,6 @@ public class GETClient {
         }
         
         System.out.println("Status: " + jsonObject.get("status"));
-
         System.out.println(stringBuilder.toString().trim()); // Remove the trailing newline
     }
 

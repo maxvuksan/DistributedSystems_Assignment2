@@ -8,7 +8,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -18,22 +19,26 @@ import util.*;
 
 
     // compile & run 
-    // javac -cp "lib/json-simple-1.1.1.jar" util/HTTPRequest.java util/WeatherData.java AggregationServer.java
+    // javac -cp "lib/json-simple-1.1.1.jar" util/*.java AggregationServer.java
     // java -cp "lib/json-simple-1.1.1.jar;." AggregationServer
 
-
+    
     public class AggregationServer {
 
         private static final int PORT = 9000;
-        //private static final ConcurrentHashMap<String, String> dataStore = new ConcurrentHashMap<>();
-        //private static JSONNode latestWeatherData = new JSONNode();
-        //private static JSONObject weatherDataMap = new JSONObject();
 
         private static Map<String, WeatherData> weatherDataMap = new HashMap<>();
-        //private TreeMap<LocalDateTime, String> dateMap = new TreeMap<>(); // Keep track of dates
         
-        public static void main(String[] args) {
+        // Lock for managing access to shared data
+        private static final ReentrantLock lock = new ReentrantLock();
+        private static final Condition condition = lock.newCondition();
+        private int lastProcessedClock = 0;
 
+        public static void main(String[] args) {
+            Start();
+        }
+
+        public static void Start(){
             try (ServerSocket serverSocket = new ServerSocket(PORT)) {
                 
                 System.out.println("Server listening on port " + PORT);
@@ -56,6 +61,15 @@ import util.*;
             }
 
             public void run() {
+
+                processIncoming();
+
+            }
+
+
+            private void processIncoming(){
+
+                lock.lock();
 
                 try (
                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -84,29 +98,33 @@ import util.*;
 
                     if(jsonBody == null){
                         out.println("{\"status\": \"500\"}");
-                        return;
                     }
-
-                    if("PUT".equals(httpRequest.method)){
+                    else{
+                        if("PUT".equals(httpRequest.method)){
         
-                        out.println(HandleContentServer(jsonBody));
-                        return;
+                            out.println(HandleContentServer(jsonBody));
+                        }
+                        else if("GET".equals(httpRequest.method)){
+    
+                            out.println(HandleGETClient(jsonBody));
+                        }
+                        else{
+                            // invalid request
+                            out.println("{\"status\": \"400\"}"); 
+                        }
                     }
-                    else if("GET".equals(httpRequest.method)){
 
-                        out.println(HandleGETClient(jsonBody));
-                        return;
-                    }
-
-                    // invalid request
-                    out.println("{\"status\": \"400\"}"); 
                 } 
                 catch (IOException e) {
 
                     e.printStackTrace();
                 }
-            }
+                finally{
+                    condition.signalAll();
+                    lock.unlock();
+                }
 
+            }
 
             // weather data expires after 30 seconds
             private void ExpireWeatherDataIfNecassary(){
@@ -156,16 +174,22 @@ import util.*;
 
                 String id = (String)jsonData.get("id").toString();
 
-                WeatherData newWeatherData = new WeatherData(jsonData, LocalDateTime.now());
+                Object lamportTime = jsonData.get("lamport_time");
+
+                int incomingLamport = ((Number) lamportTime).intValue();
+                WeatherData newWeatherData = new WeatherData(jsonData, LocalDateTime.now(), incomingLamport);
         
                 // Check if the id already exists
                 if (weatherDataMap.containsKey(id)) {
-                    
+
                     WeatherData existingData = weatherDataMap.get(id);
+
                     // Only update if the new data is more recent
-                    //(COMPARE LAMPORT CLOCK??? ONLY UPDATE IF LAMPORT CLOCK IS NEWER if (newWeatherData.getDate().isAfter(existingData.getDate())) {
-                    weatherDataMap.put(id, newWeatherData);
-                    //}
+                    if(incomingLamport > existingData.lamportClock.getTime()){
+                        newWeatherData.lamportClock.update(incomingLamport);
+                        weatherDataMap.put(id, newWeatherData);
+                    }
+                    
                     statusCode = 200; // Status = OK
                 } 
                 else {
@@ -176,7 +200,7 @@ import util.*;
 
                 ProcessContentServerMap();
 
-                String response = "{\"lamport_time\": \"%d\", \"status\": \"%d\"}";
+                String response = "{\"lamport_time\": %d, \"status\": %d}";
                 response = String.format(response, 0, statusCode);
 
                 return response;

@@ -6,49 +6,19 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
-//import lamport.LamportClockImpl;
+import util.LamportClock;
+import util.LamportClock;
 
-// compile & run
-// javac -cp "lib/json-simple-1.1.1.jar" -Xlint:unchecked ContentServer.java
-// java -cp "lib/json-simple-1.1.1.jar;." ContentServer 
+//import lamport.LamportClock;
+
+
 
 public class ContentServer {
 
-    //private static LamportClock lamportClock = new LamportClockImpl();
-
-    public static void main(String[] args) {
-
-        Scanner scanner = new Scanner(System.in);
-
-        System.out.print("[URL      ]: ");
-         
-        String url = scanner.nextLine(); 
-
-        if(url == ""){ // default address
-            url = "http://127.0.0.1:9000";
-        }
-
-        System.out.print("[FILE PATH]: ");
-        String filePath = scanner.nextLine(); 
-
-        while(true){
-
-            System.out.println("\n[Press Enter to POST Weather Data, Type 'exit' To Close]");
-            String input = scanner.nextLine(); // waits until Enter is pressed
-
-            if("exit".equalsIgnoreCase(input)){
-                break;
-            }
-
-            PostData(url, filePath);
-        }
-
-        scanner.close();
-
-    }
+    private LamportClock lamportClock = new LamportClock();
 
     @SuppressWarnings("unchecked")
-    public static JSONObject ParseWeatherFile(String filePath) {
+    public JSONObject ParseWeatherFile(String filePath) {
 
         JSONObject jsonObject = new JSONObject();
 
@@ -76,7 +46,7 @@ public class ContentServer {
     }
 
     @SuppressWarnings("unchecked")
-    public static void PostData(String serverUrl, String filePath){
+    public void PostData(String serverUrl, String filePath){
 
         String serverAddress;
         int serverPort;
@@ -115,6 +85,8 @@ public class ContentServer {
             httpRequest = String.format(httpRequest, weatherDataRaw.length(), weatherDataRaw);
 
             System.out.println("Submitted content from: " + filePath);
+
+            lamportClock.increment();
 
             out.println(httpRequest); // Sending a request to fetch data
 
@@ -157,18 +129,14 @@ public class ContentServer {
 
 
 
-    public static void HandleResponse(JSONObject jsonObject){
+    public void HandleResponse(JSONObject jsonData){
 
-        System.out.println("Status: " + jsonObject.get("status"));
+        System.out.println("Status: " + jsonData.get("status"));
 
-        // update lamport clock with new value
-        
-        //System.out.println(response.toString());
-        // recieves {lamport_time: x}
+        Object lamportTime = jsonData.get("lamport_time");
 
-        // lamportClock.update(...recievedTime);
-
-
+        // update lamport clock
+        lamportClock.update(((Number) lamportTime).intValue());
     }
 
 }
